@@ -7,6 +7,7 @@
 #include <string>
 #include <map>
 #include <sstream>
+#include <cctype>
 #include <algorithm>
 // idk why but it does not work without it
 #pragma comment(lib, "wininet.lib")
@@ -26,7 +27,7 @@ std::string getSite( const std::string& url ) {
     }
 
     // opening given URL in a session
-    HINTERNET hUrl = InternetOpenUrlA( hInternet, url.c_str(), NULL, 0, INTERNET_FLAG_RELOAD, 0 );
+    HINTERNET hUrl = InternetOpenUrlA( hInternet, url.c_str(), "Accept: text/html", 0, INTERNET_FLAG_RELOAD, 0 );
     if ( !hUrl ) {
         std::cerr << "Invalid URL." << std::endl;
         InternetCloseHandle( hInternet );
@@ -103,7 +104,13 @@ keywords getKeywords( const std::string& text, uint_fast64_t top ) {
     // iterating through the whole content
     while ( iss >> word ) {
         // removing all punctuation marks
-        word.erase( std::remove_if( word.begin(), word.end(), ispunct ), word.end() );
+        // (hate this type of solution but 'ispunct' operates only on ASCII)
+        word.erase( std::remove_if( word.begin(), word.end(),
+            []( char c ) {
+                // is alpha numeric
+                return !std::isalnum( static_cast<unsigned char>(c) );
+            }),
+        word.end() );
 
         // changing to lowercase
         std::transform( word.begin(), word.end(), word.begin(), ::tolower );
@@ -132,6 +139,117 @@ keywords getKeywords( const std::string& text, uint_fast64_t top ) {
     return keywords( words.begin(), words.begin() + top );
 }
 
+/*
+    Function that removes specified HTML tags and their content
+*/
+std::string removeTags( const std::string& text, const std::string& tag ) {
+    std::string result;
+    std::string startTag( "<" + tag );
+    std::string endTag( "</" + tag + ">" );
+    bool insideTag( false );
+
+    // iterating through every character
+    for ( size_t i = 0; i < text.size(); ++i ) {
+        if ( !insideTag ) {
+            // checking whether we found the opening tag
+            if ( text.substr( i, startTag.size() ) == startTag ) {
+                insideTag = true;
+                // moving the pointer beyond the tag
+                i += startTag.size() - 1;
+            } else {
+                // appending the character to the text
+                result += text[i];
+            }
+        } else {
+            // checking whether we found the closing tag
+            if ( text.substr( i, endTag.size() ) == endTag ) {
+                insideTag = false;
+                // moving the pointer beyond the tag
+                i += endTag.size() - 1;
+                // adding the space because sometimes the words would concatenate
+                result += " ";
+            }
+        }
+    }
+
+    return result;
+}
+
+/*
+    This solution even though is cleaner and probably faster,
+    has one significant problem. Function 'find' somehow cannot
+    reach the very end of the content. By iterating 'by hand'
+    like in the current implementation the problem is solved.
+*/
+/*std::string removeTags(const std::string& text, const std::string& tag) {
+    std::string result;
+    size_t startPos = 0;
+    std::string start = "<" + tag;
+    std::string end = tag + ">";
+
+    size_t tagStartPos, tagEndPos;
+
+    // search and remove the specified tags
+    while ( true ) {
+        // finding the position of the opening tag
+        tagStartPos = text.find( start, startPos );
+        if ( tagStartPos == std::string::npos ) {
+            // if the opening tag is not found
+            // append the remaining text and break the loop
+            result += text.substr( startPos );
+            break;
+        }
+
+        // appending the text before the opening tag
+        result += text.substr( startPos, tagStartPos - startPos );
+
+        // finding the position of the closing tag
+        tagEndPos = text.find( end, tagStartPos + start.size() );
+        // if the closing tag is not found
+        if ( tagEndPos == std::string::npos )
+            break;
+
+        // moving the starting position beyond the closing tag
+        startPos = tagEndPos + end.size();
+    }
+
+    return result;
+}*/
+
+/*
+    Function that removes all HTML tags,
+    and leaves plain text
+*/
+std::string rawText( std::string text ) {
+    bool insideTag( false );
+    std::string result;
+    size_t pos( 0 );
+    
+    // I will change this later, promise!
+    text = removeTags( text, "style" );
+    text = removeTags( text, "script" );
+    text = removeTags( text, "noscript" );
+    
+    // removing all other html tags
+    for ( char c : text ) {
+        if ( c == '<' ) {
+            insideTag = true;
+        } else if ( c == '>' ) {
+            insideTag = false;
+            result += " ";
+        } else if ( !insideTag ) {
+            result += c;
+        }
+    }
+
+    // removing all html special characters
+    std::regex htmlSpecialChars( "&[a-zA-Z0-9#]+;" );
+    return std::regex_replace( result, htmlSpecialChars, "" );
+}
+
+/*
+    Function that crawls through given URL
+*/
 void crawl( std::string url, uint_fast64_t depth = 1 ) {
     // downloading site's content
     std::string content( getSite( url ) );
@@ -139,11 +257,21 @@ void crawl( std::string url, uint_fast64_t depth = 1 ) {
     // i hope there is no memory leak
     std::vector<std::string*> links( extractLinks( content, url ) );
 
+    // deHTMLing
+    content = rawText( content );
+
+    // extracting keywords
+    keywords topWords( getKeywords( content, 10 ) );
+
     // debugging
     std::cout << depth << " " << links.size() << "\n";
+    for ( const auto& pair : topWords ) {
+        std::cout << pair.first << " : " << pair.second << std::endl;
+    }
 
     /*
-        * estimating site's keywords
+        * estimating site's keywords with dictionary
+          that will exclude conjunction words etc.
         * checking to which sites it refers (to increase their score)
         * saves this data (in a file named by hashed link)
         * boom search engine searches
@@ -165,21 +293,12 @@ void crawl( std::string url, uint_fast64_t depth = 1 ) {
 }
 
 int main() {
-    //std::string text = getSite( "https://pl.wikipedia.org/" );
-    std::string text = "test Test. Sprawdzilem ile mnie ten test kosztowal! Zero zlotych, zero!";
-
-    keywords topWords = getKeywords( text, 3 );
-
-    for ( const auto& pair : topWords ) {
-        std::cout << pair.first << " : " << pair.second << std::endl;
-    }
-
-    /*std::string url;
+    std::string url;
     uint_fast64_t depth;
     std::cout << "The starting URL >> ";
     std::cin >> url;
     std::cout << "Depth >> ";
     std::cin >> depth;
 
-    crawl( url, depth );*/
+    crawl( url, depth );
 }
