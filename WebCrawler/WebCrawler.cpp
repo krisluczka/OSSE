@@ -1,4 +1,7 @@
-﻿#include <iostream>
+﻿/*
+    WebCrawler project, Krzysztof Łuczka 2024, MIT license
+*/
+#include <iostream>
 #include <windows.h>
 #include <wininet.h>
 #include <fstream>
@@ -11,6 +14,7 @@
 #include <algorithm>
 // idk why but it does not work without it
 #pragma comment(lib, "wininet.lib")
+#include "dictionaries.h"
 
 // damn
 typedef std::vector<std::pair<std::string, uint_fast64_t>> keywords;
@@ -66,7 +70,7 @@ std::vector<std::string*> extractLinks( const std::string& content, const std::s
 
     // searching for the link
     std::smatch match;
-    auto text = content; // it doesn't work without this lol
+    auto text( content ); // it doesn't work without this lol
     std::string* link;
     while ( std::regex_search( text, match, linkRegex ) ) {
         link = new std::string( match[1].str() ); // extracting
@@ -104,18 +108,20 @@ keywords getKeywords( const std::string& text, uint_fast64_t top ) {
     // iterating through the whole content
     while ( iss >> word ) {
         // removing all punctuation marks
-        // (hate this type of solution but 'ispunct' operates only on ASCII)
-        word.erase( std::remove_if( word.begin(), word.end(),
-            []( char c ) {
-                // is alpha numeric
-                return !std::isalnum( static_cast<unsigned char>(c) );
-            }),
-        word.end() );
+        word.erase( std::remove_if( word.begin(), word.end(), []( char c ) {
+            return std::ispunct( static_cast<unsigned char>(c) );
+        }), word.end() );
 
         // changing to lowercase
         std::transform( word.begin(), word.end(), word.begin(), ::tolower );
 
-        // increasing the word count
+        // checking if document's language has the dictionary prepared
+        if ( dictionary.find( "pl" ) != dictionary.end() ) {
+            const std::vector<std::string>& ignoredWords = dictionary.at( "pl" );
+            // if the word is in the dictionary, ignore it and move to the next
+            if ( std::find( ignoredWords.begin(), ignoredWords.end(), word ) != ignoredWords.end() )
+                continue;
+        }
         wordCount[word]++;
     }
 
@@ -125,7 +131,7 @@ keywords getKeywords( const std::string& text, uint_fast64_t top ) {
         words.push_back( pair );
     }
 
-    // hate to use this way of sorting but it really is better
+    // hate to use this way of sorting but it really is better than by hand
     std::sort( words.begin(), words.end(), []( const auto& a, const auto& b ) {
         return a.second > b.second;
     });
@@ -174,47 +180,6 @@ std::string removeTags( const std::string& text, const std::string& tag ) {
 
     return result;
 }
-
-/*
-    This solution even though is cleaner and probably faster,
-    has one significant problem. Function 'find' somehow cannot
-    reach the very end of the content. By iterating 'by hand'
-    like in the current implementation the problem is solved.
-*/
-/*std::string removeTags(const std::string& text, const std::string& tag) {
-    std::string result;
-    size_t startPos = 0;
-    std::string start = "<" + tag;
-    std::string end = tag + ">";
-
-    size_t tagStartPos, tagEndPos;
-
-    // search and remove the specified tags
-    while ( true ) {
-        // finding the position of the opening tag
-        tagStartPos = text.find( start, startPos );
-        if ( tagStartPos == std::string::npos ) {
-            // if the opening tag is not found
-            // append the remaining text and break the loop
-            result += text.substr( startPos );
-            break;
-        }
-
-        // appending the text before the opening tag
-        result += text.substr( startPos, tagStartPos - startPos );
-
-        // finding the position of the closing tag
-        tagEndPos = text.find( end, tagStartPos + start.size() );
-        // if the closing tag is not found
-        if ( tagEndPos == std::string::npos )
-            break;
-
-        // moving the starting position beyond the closing tag
-        startPos = tagEndPos + end.size();
-    }
-
-    return result;
-}*/
 
 /*
     Function that removes all HTML tags,
@@ -270,8 +235,6 @@ void crawl( std::string url, uint_fast64_t depth = 1 ) {
     }
 
     /*
-        * estimating site's keywords with dictionary
-          that will exclude conjunction words etc.
         * checking to which sites it refers (to increase their score)
         * saves this data (in a file named by hashed link)
         * boom search engine searches
