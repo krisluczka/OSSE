@@ -12,6 +12,7 @@
 #include <sstream>
 #include <cctype>
 #include <algorithm>
+#include <chrono>
 // idk why but it does not work without it
 #pragma comment(lib, "wininet.lib")
 #include "dictionaries.h"
@@ -59,58 +60,64 @@ std::string getSite( const std::string& url ) {
 }
 
 /*
-    Function that extracts document's language
+    Function that validates the URL
 */
-inline std::string extractLanguage( const std::string& content ) {
-    std::regex langRegex( "<html(?:[^>]*\\s+)?(?:lang|xml:lang)[\\s]*=[\\s]*['\"]([^'\"]*)['\"]" );
-
-    std::smatch match;
-
-    // searching for the language
-    if ( std::regex_search( content, match, langRegex ) )
-        return match[1].str().empty() ? match[2].str() : match[1].str();
-    
-    // if the language wasn't found, return empty
-    return "";
+inline bool validateURL( const std::string& url ) {
+    std::regex urlRegex( "^(http|https)://[a-zA-Z0-9-.]+\\.[a-zA-Z]{2,}(?:/[^\\s]*)?$" );
+    return std::regex_match(url, urlRegex);
 }
 
 /*
-    Function that extracts every link from a given HTML page
+    Function that extracts:
+        * links
+        * title
+        * language
 */
-std::vector<std::string*> extractLinks( const std::string& content, const std::string& url ) {
-    // regex to find the <a></a>
-    std::regex linkRegex( "<a\\s+(?:[^>]*?\\s+)?href[\\s]*=[\\s]*['\"]([^'\"]*?)['\"][^>]*?>" );
+void extractInfo( const std::string& url, const std::string& content, std::vector<std::string*>& links, std::string& title, std::string& language, bool extract_links = true ) {
+    // regexes
+    std::regex titleRegex( "<title>(.*?)</title>" );
+    std::regex langRegex( "<html(?:[^>]*\\s+)?(?:lang|xml:lang)[\\s]*=[\\s]*['\"]([^'\"]*)['\"]" );
+    std::smatch match;
+    
+    // searching for the title
+    if ( std::regex_search( content, match, titleRegex ) )
+        title = match[1].str();
+    else title = "";
 
-    // links vector
-    std::vector<std::string*> links;
+    // searching for the language
+    if ( std::regex_search( content, match, langRegex ) )
+        language = match[1].str().empty() ? match[2].str() : match[1].str();
+    else language = "en";
 
     // searching for the link
-    std::smatch match;
-    auto text( content ); // it doesn't work without this lol
-    std::string* link;
-    while ( std::regex_search( text, match, linkRegex ) ) {
-        link = new std::string( match[1].str() ); // extracting
+    if ( extract_links ) {
+        std::regex linkRegex( "<a\\s+(?:[^>]*?\\s+)?href[\\s]*=[\\s]*['\"]([^'\"]*?)['\"][^>]*?>" );
+        auto text( content ); // it doesn't work without this lol
+        std::string* link;
+        while ( std::regex_search( text, match, linkRegex ) ) {
+            link = new std::string( match[1].str() ); // extracting
 
-        // validating the url and correcting errors
-        if ( link->substr( 0, 7 ) != "http://" && link->substr( 0, 8 ) != "https://" ) {
-            if ( link->substr( 0, 2 ) == "./" ) {
-                *link = url + link->substr( 2 );
-            } else if ( link->find( "/" ) == 0 ) {
-                *link = url + link->substr( 1 );
-            } else if ( link->find( "www." ) == std::string::npos ) {
-                *link = "http://www." + *link;
-            } else {
-                *link = "http://" + *link;
+            // validating the url and correcting errors
+            if ( link->substr( 0, 7 ) != "http://" && link->substr( 0, 8 ) != "https://" ) {
+                if ( link->substr( 0, 2 ) == "./" ) {
+                    *link = url + link->substr( 2 );
+                } else if ( link->find( "/" ) == 0 ) {
+                    *link = url + link->substr( 1 );
+                } else if ( link->find( "www." ) == std::string::npos ) {
+                    *link = "http://www." + *link;
+                } else {
+                    *link = "http://" + *link;
+                }
             }
+
+            // validating the URL
+            if ( validateURL( *link ) )
+                links.push_back( link );
+
+            // going further in the webpage
+            text = match.suffix();
         }
-
-        links.push_back( link );
-
-        // going further in the webpage
-        text = match.suffix();
     }
-
-    return links;
 }
 
 /*
@@ -132,14 +139,15 @@ keywords getKeywords( const std::string& text, std::string language, uint_fast64
         std::transform( word.begin(), word.end(), word.begin(), ::tolower );
 
         // checking if document's language has the dictionary prepared
-        
         if ( dictionary.find( language ) != dictionary.end() ) {
             const std::vector<std::string>& ignoredWords = dictionary.at( language );
             // if the word is in the dictionary, ignore it and move to the next
             if ( std::find( ignoredWords.begin(), ignoredWords.end(), word ) != ignoredWords.end() )
                 continue;
         }
-        wordCount[word]++;
+
+        if ( word != "" )
+            wordCount[word]++;
     }
 
     // keywording the keywords
@@ -163,97 +171,55 @@ keywords getKeywords( const std::string& text, std::string language, uint_fast64
 }
 
 /*
-    Function that removes specified HTML tags and their content
+    Function that extracts raw content from HTML
+    To rewrite!
 */
-std::string removeTags( const std::string& text, const std::string& tag ) {
-    std::string result;
-    std::string startTag( "<" + tag );
-    std::string endTag( "</" + tag + ">" );
-    bool insideTag( false );
+std::string extractContent( const std::string& content ) {
+    std::regex tagsRegex( "<(?:script|style|noscript)[^>]*>[\\s\\S]*?<\\/\\s*(?:script|style|noscript)>" );
+    std::regex htmlRegex( "<[^>]*>" );
+    std::regex specialRegex( "&[a-zA-Z0-9#]+;" );
 
-    // iterating through every character
-    for ( size_t i = 0; i < text.size(); ++i ) {
-        if ( !insideTag ) {
-            // checking whether we found the opening tag
-            if ( text.substr( i, startTag.size() ) == startTag ) {
-                insideTag = true;
-                // moving the pointer beyond the tag
-                i += startTag.size() - 1;
-            } else {
-                // appending the character to the text
-                result += text[i];
-            }
-        } else {
-            // checking whether we found the closing tag
-            if ( text.substr( i, endTag.size() ) == endTag ) {
-                insideTag = false;
-                // moving the pointer beyond the tag
-                i += endTag.size() - 1;
-                // adding the space because sometimes the words would concatenate
-                result += " ";
-            }
-        }
-    }
+    // removing <script>, <style> and <noscript>
+    std::string result = std::regex_replace( content, tagsRegex, " " );
+
+    // removing other tags
+    result = std::regex_replace( result, htmlRegex, " " );
+
+    // removing special characters
+    result = std::regex_replace( result, specialRegex, " " );
 
     return result;
 }
 
 /*
-    Function that removes all HTML tags,
-    and leaves plain text
-*/
-std::string rawText( std::string text ) {
-    bool insideTag( false );
-    std::string result;
-    size_t pos( 0 );
-    
-    // I will change this later, promise!
-    text = removeTags( text, "style" );
-    text = removeTags( text, "script" );
-    text = removeTags( text, "noscript" );
-    
-    // removing all other html tags
-    for ( char c : text ) {
-        if ( c == '<' ) {
-            insideTag = true;
-        } else if ( c == '>' ) {
-            insideTag = false;
-            result += " ";
-        } else if ( !insideTag ) {
-            result += c;
-        }
-    }
-
-    // removing all html special characters
-    std::regex htmlSpecialChars( "&[a-zA-Z0-9#]+;" );
-    return std::regex_replace( result, htmlSpecialChars, "" );
-}
-
-/*
     Function that crawls through given URL
 */
-void crawl( std::string url, uint_fast64_t depth = 1 ) {
+uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::string*> &all_time_links ) {
     // downloading site's content
     std::string content( getSite( url ) );
     
-    // i hope there is no memory leak
-    std::vector<std::string*> links( extractLinks( content, url ) );
-
-    // extracting language
-    std::string language( extractLanguage( content ) );
+    // extracting info about the document
+    std::vector<std::string*> links;
+    std::string language;
+    std::string title;
+    extractInfo( url, content, links, title, language, (depth > 1) );
+    uint_fast64_t amount( 0 );
 
     // deHTMLing
-    content = rawText( content );
+    content = extractContent( content );
 
     // extracting keywords
     keywords topWords( getKeywords( content, language, 10 ) );
 
     // debugging
-    std::cout << language << " " << url << "\n";
-    std::cout << depth << " " << links.size() << "\n";
-    for ( const auto& pair : topWords ) {
-        std::cout << pair.first << " : " << pair.second << std::endl;
-    }
+    std::cout << url << "\n";
+    std::cout << language << " - " << title << "\n\n";
+
+    /*
+        In order for this to be faster:
+            - most of the things should be executed in one loop
+            - already indexed sites shouldn't be processed
+    */
 
     /*
         * checking to which sites it refers (to increase their score)
@@ -261,28 +227,51 @@ void crawl( std::string url, uint_fast64_t depth = 1 ) {
         * boom search engine searches
     */
 
-    // going deeper
     --depth;
+    // crawl my spiders!
     if ( depth > 0 ) {
         for ( std::string* l : links ) {
-            // crawl my spiders!
-            crawl( *l, depth );
+            // searching whether link was already indexed
+            auto it = std::find_if( all_time_links.begin(), all_time_links.end(),
+                [l](std::string* ptr) {
+                    return *ptr == *l;
+                });
+
+            // if it wasn't
+            if ( it == all_time_links.end() ) {
+                std::string* new_link = new std::string;
+                *new_link = *l;
+                all_time_links.push_back( new_link );
+                crawl( *l, depth, all_time_links );
+            }
         }
-    }
+        amount = links.size();
+    } else amount = 1;
 
     // yes yes, remember to delete your pointers, kids!
-    for ( std::string* l : links ) {
+    for ( std::string* l : links )
         delete l;
-    }
+
+    return amount;
 }
 
 int main() {
     std::string url;
     uint_fast64_t depth;
+    std::vector<std::string*> searched_links;
     std::cout << "The starting URL >> ";
     std::cin >> url;
     std::cout << "Depth >> ";
     std::cin >> depth;
 
-    crawl( url, depth );
+    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+    uint_fast64_t links_amount = crawl( url, depth, searched_links );
+    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+
+    std::cout << "Elapsed time >> " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]\n";
+    std::cout << "Total links indexed >> " << links_amount << "\n";
+
+    for ( std::string* l : searched_links )
+        delete l;
+    searched_links.clear();
 }
