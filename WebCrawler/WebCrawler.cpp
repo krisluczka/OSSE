@@ -59,6 +59,22 @@ std::string getSite( const std::string& url ) {
 }
 
 /*
+    Function that extracts document's language
+*/
+inline std::string extractLanguage( const std::string& content ) {
+    std::regex langRegex( "<html(?:[^>]*\\s+)?(?:lang|xml:lang)[\\s]*=[\\s]*['\"]([^'\"]*)['\"]" );
+
+    std::smatch match;
+
+    // searching for the language
+    if ( std::regex_search( content, match, langRegex ) )
+        return match[1].str().empty() ? match[2].str() : match[1].str();
+    
+    // if the language wasn't found, return empty
+    return "";
+}
+
+/*
     Function that extracts every link from a given HTML page
 */
 std::vector<std::string*> extractLinks( const std::string& content, const std::string& url ) {
@@ -100,7 +116,7 @@ std::vector<std::string*> extractLinks( const std::string& content, const std::s
 /*
     Function that returns the most occuring words in a string
 */
-keywords getKeywords( const std::string& text, uint_fast64_t top ) {
+keywords getKeywords( const std::string& text, std::string language, uint_fast64_t top ) {
     std::map<std::string, uint_fast64_t> wordCount;
     std::istringstream iss( text );
     std::string word;
@@ -116,8 +132,9 @@ keywords getKeywords( const std::string& text, uint_fast64_t top ) {
         std::transform( word.begin(), word.end(), word.begin(), ::tolower );
 
         // checking if document's language has the dictionary prepared
-        if ( dictionary.find( "pl" ) != dictionary.end() ) {
-            const std::vector<std::string>& ignoredWords = dictionary.at( "pl" );
+        
+        if ( dictionary.find( language ) != dictionary.end() ) {
+            const std::vector<std::string>& ignoredWords = dictionary.at( language );
             // if the word is in the dictionary, ignore it and move to the next
             if ( std::find( ignoredWords.begin(), ignoredWords.end(), word ) != ignoredWords.end() )
                 continue;
@@ -222,13 +239,17 @@ void crawl( std::string url, uint_fast64_t depth = 1 ) {
     // i hope there is no memory leak
     std::vector<std::string*> links( extractLinks( content, url ) );
 
+    // extracting language
+    std::string language( extractLanguage( content ) );
+
     // deHTMLing
     content = rawText( content );
 
     // extracting keywords
-    keywords topWords( getKeywords( content, 10 ) );
+    keywords topWords( getKeywords( content, language, 10 ) );
 
     // debugging
+    std::cout << language << " " << url << "\n";
     std::cout << depth << " " << links.size() << "\n";
     for ( const auto& pair : topWords ) {
         std::cout << pair.first << " : " << pair.second << std::endl;

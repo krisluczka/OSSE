@@ -23,7 +23,9 @@ const std::map<std::string, std::vector<std::string>> dictionary = {
             "wiec", "wiêc", "zatem", "totez", "tote¿", "mianowicie", "to",
             "ani", "ni",
 
-            "czy", "tylko", "oby", "sie", "siê",
+            "czy", "tylko", "oby", "sie", "siê", "oto", "co"
         }},
-        {"en", {"test"}},
+        {"en", {
+            "and", "to", "a", "an", "with", "by", "so"
+        }},
 };
