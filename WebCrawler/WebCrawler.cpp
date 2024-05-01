@@ -5,9 +5,14 @@
 #include <vector>
 #include <regex>
 #include <string>
+#include <map>
+#include <sstream>
+#include <algorithm>
 // idk why but it does not work without it
 #pragma comment(lib, "wininet.lib")
 
+// damn
+typedef std::vector<std::pair<std::string, uint_fast64_t>> keywords;
 
 /*
     Function that downloads webpage content
@@ -87,12 +92,52 @@ std::vector<std::string*> extractLinks( const std::string& content, const std::s
     return links;
 }
 
+/*
+    Function that returns the most occuring words in a string
+*/
+keywords getKeywords( const std::string& text, uint_fast64_t top ) {
+    std::map<std::string, uint_fast64_t> wordCount;
+    std::istringstream iss( text );
+    std::string word;
+
+    // iterating through the whole content
+    while ( iss >> word ) {
+        // removing all punctuation marks
+        word.erase( std::remove_if( word.begin(), word.end(), ispunct ), word.end() );
+
+        // changing to lowercase
+        std::transform( word.begin(), word.end(), word.begin(), ::tolower );
+
+        // increasing the word count
+        wordCount[word]++;
+    }
+
+    // keywording the keywords
+    keywords words;
+    for ( const auto& pair : wordCount ) {
+        words.push_back( pair );
+    }
+
+    // hate to use this way of sorting but it really is better
+    std::sort( words.begin(), words.end(), []( const auto& a, const auto& b ) {
+        return a.second > b.second;
+    });
+
+    // preventing the potential going out of scope
+    if ( top > words.size() ) {
+        top = words.size();
+    }
+
+    // returning sorted array of keywords
+    return keywords( words.begin(), words.begin() + top );
+}
+
 void crawl( std::string url, uint_fast64_t depth = 1 ) {
     // downloading site's content
     std::string content( getSite( url ) );
     
     // i hope there is no memory leak
-    std::vector<std::string*> links = extractLinks( content, url );
+    std::vector<std::string*> links( extractLinks( content, url ) );
 
     // debugging
     std::cout << depth << " " << links.size() << "\n";
@@ -120,21 +165,21 @@ void crawl( std::string url, uint_fast64_t depth = 1 ) {
 }
 
 int main() {
-    std::string url;
+    //std::string text = getSite( "https://pl.wikipedia.org/" );
+    std::string text = "test Test. Sprawdzilem ile mnie ten test kosztowal! Zero zlotych, zero!";
+
+    keywords topWords = getKeywords( text, 3 );
+
+    for ( const auto& pair : topWords ) {
+        std::cout << pair.first << " : " << pair.second << std::endl;
+    }
+
+    /*std::string url;
     uint_fast64_t depth;
     std::cout << "The starting URL >> ";
     std::cin >> url;
     std::cout << "Depth >> ";
     std::cin >> depth;
-    
-    crawl( url, depth );
 
-    /*if ( !content.empty() ) {
-        std::ofstream outputFile( "webpage_content.html" );
-        outputFile << content;
-        outputFile.close();
-        std::cout << "Website saved as webpage_content.html" << std::endl;
-    } else {
-        std::cout << "Error." << std::endl;
-    }*/
+    crawl( url, depth );*/
 }
