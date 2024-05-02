@@ -76,9 +76,6 @@ inline bool validateURL( const std::string& url ) {
     from a HTML document
 */
 void extractInfo( const std::string& url, std::string& content, std::vector<std::string*>& links, std::string& title, std::string& language, bool extract_links = true ) {
-    // removing diactric characters
-    content = remove_diactric( content );
-    
     // regexes
     std::regex titleRegex( "<title>(.*?)</title>" );
     std::regex langRegex( "<html(?:[^>]*\\s+)?(?:lang|xml:lang)[\\s]*=[\\s]*['\"]([^'\"]*)['\"]" );
@@ -136,13 +133,14 @@ void extractInfo( const std::string& url, std::string& content, std::vector<std:
 /*
     Function that returns the most occuring words in a string
 */
-keywords getKeywords( const std::string& text, std::string language, uint_fast64_t top ) {
-    std::map<std::string, uint_fast64_t> wordCount;
-    std::istringstream iss( text );
+keywords getKeywords( const std::string& content, std::string title, std::string language, uint_fast64_t top ) {
+    std::map<std::string, uint_fast64_t> wordScores;
+    std::istringstream cstream( content ), tstream( title );
     std::string word;
+    uint_fast64_t title_size( 0 ), total_occurences( 0 );
 
     // iterating through the whole content
-    while ( iss >> word ) {
+    while ( cstream >> word ) {
         // removing all punctuation marks
         word.erase( std::remove_if( word.begin(), word.end(), []( char c ) {
             return std::ispunct( static_cast<unsigned char>(c) );
@@ -160,13 +158,14 @@ keywords getKeywords( const std::string& text, std::string language, uint_fast64
             }
         }
 
+        // counting up the occurences
         if ( word != "" )
-            wordCount[word]++;
+            wordScores[word]++;
     }
 
     // keywording the keywords
     keywords words;
-    for ( const auto& pair : wordCount ) {
+    for ( const auto& pair : wordScores ) {
         words.push_back( pair );
     }
 
@@ -179,8 +178,29 @@ keywords getKeywords( const std::string& text, std::string language, uint_fast64
     if ( top > words.size() )
         top = words.size();
 
+    // removing unnecessary words
+    keywords result( words.begin(), words.begin() + top );
+
+    // counting the occurences of given words
+    for ( const auto& pair : result ) {
+        total_occurences += pair.second;
+    }
+
+    // calculating true scores of keywords
+    for ( auto& pair : result ) {
+        pair.second = pair.second * 1000 / total_occurences;
+    }
+
+    // appending title keywords' scores
+    while ( tstream >> word )
+        if ( word != "" ) {
+            result.push_back( std::make_pair( word, 1000 ) );
+            ++title_size;
+        }
+    top += title_size;
+
     // returning sorted array of keywords
-    return keywords( words.begin(), words.begin() + top );
+    return result;
 }
 
 /*
@@ -222,17 +242,18 @@ uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::stri
     content = extractContent( content );
 
     // extracting keywords
-    keywords topWords( getKeywords( content, language, 5 ) );
+    keywords topWords( getKeywords( content, title, language, 5 ) );
 
     // saving indexed site's data
-    std::string record( url + " " + title + " " );
+    std::ostringstream record;
+    record << url << " ";
     for ( const auto& pair : topWords ) {
-        record += pair.first + " ";
+        record << pair.first << " " << pair.second << " ";
     }
-    index << record << "\n";
+    index << record.str() << "\n";
 
     // debugging
-    std::cout << url << "\n";
+    std::cout << record.str() << "\n";
 
     --depth;
     // crawl my spiders!
@@ -296,7 +317,7 @@ int main() {
     Results of the web crawling are saved in a 'index.txt' file
     with this structure of every site (every line)
 
-        URL keyword1 keyword2 ... score1 score2 ... date_of_indexing
+        URL keyword1 score1 keyword2 score2 ... date_of_indexing
 
     Where first keywords are document's title, and their score is
     set to 1000. Next keywords are those estimated while indexing,
