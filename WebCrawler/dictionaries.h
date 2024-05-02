@@ -1,4 +1,6 @@
 #pragma once
+#include <codecvt>
+#include <locale>
 
 /*
     The dictionary of ignored words must contain:
@@ -28,72 +30,78 @@ const std::map<std::string, std::vector<std::string>> dictionary = {
 
 /*
     This must contain all diactric converted to their
-    latin equvialents.
+    latin equvialents. Should include both lowercase
+    and uppercase variants.
 
-    This should include both lowercase and uppercase variants.\
-
-
-    DOES NOT WORK AT ALL
+    Total hours spent to solve this - ~9 hours
 */
-const inline std::string remove_diactric( std::string word ) {
-    for ( size_t i( 0 ); i < word.size(); ++i ) {
-        switch ( word[i] ) {
+const inline std::string remove_diactric( const std::string &content ) {
+    std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
+    std::u32string content32( conv.from_bytes( content ) );
+
+    std::string result;
+
+    for ( char32_t c : content32 ) {
+        switch ( c ) {
             // Polish letters
-            case '•':
-                word[i] = 'A';
+            case U'•':
+                result += U'A';
                 break;
-            case 'a':
-                word[i] = 'a';
+            case U'π':
+                result += U'a';
                 break;
-            case '∆':
-                word[i] = 'C';
+            case U'∆':
+                result += U'C';
                 break;
-            case 'Ê':
-                word[i] = 'c';
+            case U'Ê':
+                result += U'c';
                 break;
-            case ' ':
-                word[i] = 'E';
+            case U' ':
+                result += U'E';
                 break;
-            case 'Í':
-                word[i] = 'e';
+            case U'Í':
+                result += U'e';
                 break;
-            case '£':
-                word[i] = 'L';
+            case U'£':
+                result += U'L';
                 break;
-            case '≥':
-                word[i] = 'l';
+            case U'≥':
+                result += U'l';
                 break;
-            case '—':
-                word[i] = 'N';
+            case U'—':
+                result += U'N';
                 break;
-            case 'Ò':
-                word[i] = 'n';
+            case U'Ò':
+                result += U'n';
                 break;
-            case '”':
-                word[i] = 'O';
+            case U'”':
+                result += U'O';
                 break;
-            case 'Û':
-                word[i] = 'o';
+            case U'Û':
+                result += U'o';
                 break;
-            case 'å':
-                word[i] = 'S';
+            case U'å':
+                result += U'S';
                 break;
-            case 'ú':
-                word[i] = 's';
+            case U'ú':
+                result += U's';
                 break;
-            case 'è':
-                word[i] = 'Z';
+            case U'è':
+                result += U'Z';
                 break;
-            case 'ü':
-                word[i] = 'z';
+            case U'ü':
+                result += U'z';
                 break;
-            case 'Ø':
-                word[i] = 'Z';
+            case U'Ø':
+                result += U'Z';
                 break;
-            case 'ø':
-                word[i] = 'z';
+            case U'ø':
+                result += U'z';
                 break;
+            default:
+                result += c;
         }
     }
-    return word;
+
+    return result;
 }

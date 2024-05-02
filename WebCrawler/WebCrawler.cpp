@@ -83,7 +83,7 @@ void extractInfo( const std::string& url, std::string& content, std::vector<std:
     
     // searching for the title
     if ( std::regex_search( content, match, titleRegex ) )
-        title = match[1].str();
+        title = remove_diactric( match[1].str() );
     else title = "";
 
     // removing title's punctuation marks
@@ -221,7 +221,7 @@ std::string extractContent( const std::string& content ) {
     // removing special characters
     result = std::regex_replace( result, specialRegex, " " );
 
-    return result;
+    return remove_diactric( result );
 }
 
 /*
@@ -240,7 +240,6 @@ uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::stri
 
     // deHTMLing
     content = extractContent( content );
-
     // extracting keywords
     keywords topWords( getKeywords( content, title, language, 5 ) );
 
