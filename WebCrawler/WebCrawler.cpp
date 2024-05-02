@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <wininet.h>
 #include <fstream>
+#include <sstream>
 #include <vector>
 #include <regex>
 #include <string>
@@ -72,8 +73,12 @@ inline bool validateURL( const std::string& url ) {
         * links
         * title
         * language
+    from a HTML document
 */
-void extractInfo( const std::string& url, const std::string& content, std::vector<std::string*>& links, std::string& title, std::string& language, bool extract_links = true ) {
+void extractInfo( const std::string& url, std::string& content, std::vector<std::string*>& links, std::string& title, std::string& language, bool extract_links = true ) {
+    // removing diactric characters
+    content = remove_diactric( content );
+    
     // regexes
     std::regex titleRegex( "<title>(.*?)</title>" );
     std::regex langRegex( "<html(?:[^>]*\\s+)?(?:lang|xml:lang)[\\s]*=[\\s]*['\"]([^'\"]*)['\"]" );
@@ -83,6 +88,14 @@ void extractInfo( const std::string& url, const std::string& content, std::vecto
     if ( std::regex_search( content, match, titleRegex ) )
         title = match[1].str();
     else title = "";
+
+    // removing title's punctuation marks
+    title.erase( std::remove_if( title.begin(), title.end(), []( char c ) {
+        return std::ispunct( static_cast<unsigned char>(c) );
+    } ), title.end() );
+
+    // changing to lowercase
+    std::transform( title.begin(), title.end(), title.begin(), ::tolower );
 
     // searching for the language
     if ( std::regex_search( content, match, langRegex ) )
@@ -142,8 +155,9 @@ keywords getKeywords( const std::string& text, std::string language, uint_fast64
         if ( dictionary.find( language ) != dictionary.end() ) {
             const std::vector<std::string>& ignoredWords = dictionary.at( language );
             // if the word is in the dictionary, ignore it and move to the next
-            if ( std::find( ignoredWords.begin(), ignoredWords.end(), word ) != ignoredWords.end() )
+            if ( std::find( ignoredWords.begin(), ignoredWords.end(), word ) != ignoredWords.end() ) {
                 continue;
+            }
         }
 
         if ( word != "" )
@@ -162,9 +176,8 @@ keywords getKeywords( const std::string& text, std::string language, uint_fast64
     });
 
     // preventing the potential going out of scope
-    if ( top > words.size() ) {
+    if ( top > words.size() )
         top = words.size();
-    }
 
     // returning sorted array of keywords
     return keywords( words.begin(), words.begin() + top );
@@ -180,7 +193,7 @@ std::string extractContent( const std::string& content ) {
     std::regex specialRegex( "&[a-zA-Z0-9#]+;" );
 
     // removing <script>, <style> and <noscript>
-    std::string result = std::regex_replace( content, tagsRegex, " " );
+    std::string result( std::regex_replace( content, tagsRegex, " " ) );
 
     // removing other tags
     result = std::regex_replace( result, htmlRegex, " " );
@@ -194,7 +207,7 @@ std::string extractContent( const std::string& content ) {
 /*
     Function that crawls through given URL
 */
-uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::string*> &all_time_links ) {
+uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::string*>& all_time_links, std::fstream& index ) {
     // downloading site's content
     std::string content( getSite( url ) );
     
@@ -202,30 +215,24 @@ uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::stri
     std::vector<std::string*> links;
     std::string language;
     std::string title;
-    extractInfo( url, content, links, title, language, (depth > 1) );
     uint_fast64_t amount( 0 );
+    extractInfo( url, content, links, title, language, (depth > 1) );
 
     // deHTMLing
     content = extractContent( content );
 
     // extracting keywords
-    keywords topWords( getKeywords( content, language, 10 ) );
+    keywords topWords( getKeywords( content, language, 5 ) );
+
+    // saving indexed site's data
+    std::string record( url + " " + title + " " );
+    for ( const auto& pair : topWords ) {
+        record += pair.first + " ";
+    }
+    index << record << "\n";
 
     // debugging
     std::cout << url << "\n";
-    std::cout << language << " - " << title << "\n\n";
-
-    /*
-        In order for this to be faster:
-            - most of the things should be executed in one loop
-            - already indexed sites shouldn't be processed
-    */
-
-    /*
-        * checking to which sites it refers (to increase their score)
-        * saves this data (in a file named by hashed link)
-        * boom search engine searches
-    */
 
     --depth;
     // crawl my spiders!
@@ -239,10 +246,10 @@ uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::stri
 
             // if it wasn't
             if ( it == all_time_links.end() ) {
-                std::string* new_link = new std::string;
+                std::string* new_link( new std::string );
                 *new_link = *l;
                 all_time_links.push_back( new_link );
-                crawl( *l, depth, all_time_links );
+                crawl( *l, depth, all_time_links, index );
             }
         }
         amount = links.size();
@@ -259,19 +266,48 @@ int main() {
     std::string url;
     uint_fast64_t depth;
     std::vector<std::string*> searched_links;
+    std::fstream index( "index.txt", std::ios::in | std::ios::out | std::ios::app );
+
+    if ( !index.is_open() ) {
+        std::cerr << "File couldn't be opened nor created." << std::endl;
+        return 1;
+    }
+
     std::cout << "The starting URL >> ";
     std::cin >> url;
     std::cout << "Depth >> ";
     std::cin >> depth;
 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-    uint_fast64_t links_amount = crawl( url, depth, searched_links );
+    uint_fast64_t links_amount = crawl( url, depth, searched_links, index );
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 
     std::cout << "Elapsed time >> " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]\n";
     std::cout << "Total links indexed >> " << links_amount << "\n";
-
+    
     for ( std::string* l : searched_links )
         delete l;
     searched_links.clear();
+
+    index.close();
 }
+
+/*
+    Results of the web crawling are saved in a 'index.txt' file
+    with this structure of every site (every line)
+
+        URL keyword1 keyword2 ... score1 score2 ... date_of_indexing
+
+    Where first keywords are document's title, and their score is
+    set to 1000. Next keywords are those estimated while indexing,
+    and their scores are calculated by this formula
+
+        Sk = 1000 * Ok / (O1 + O2 + O3 + ... + On)
+
+        n - amount of keywords (without the title)
+        Sk - integer score of k-th keyword
+        Ok - number of occurences in the document of k-th keyword
+
+    The main 5 most occuring words on a page are set to be the
+    keywords.
+*/
