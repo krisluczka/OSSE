@@ -3,6 +3,7 @@
 */
 #include <iostream>
 #include <windows.h>
+#include <time.h>
 #include <wininet.h>
 #include <fstream>
 #include <sstream>
@@ -14,6 +15,8 @@
 #include <cctype>
 #include <algorithm>
 #include <chrono>
+#include <thread>
+#include <future>
 // idk why but it does not work without it
 #pragma comment(lib, "wininet.lib")
 #include "dictionaries.h"
@@ -289,18 +292,37 @@ uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::stri
     Function that indexes and crawls through
     the Internet
 */
-uint_fast64_t index( std::string url, uint_fast64_t depth ) {
+uint_fast64_t index( uint_fast64_t depth, uint_fast64_t threads = 0 ) {
+    // getting the amount of threads to run
+    SYSTEM_INFO sysInfo;
+    GetSystemInfo( &sysInfo );
+    // times two just for experiments
+    threads = sysInfo.dwNumberOfProcessors * 2;
+
+    // important stuff
     keywords_map index_map;
-    std::vector<std::string*> searched_links( { new std::string( url ) } );
+    std::vector<std::string*> searched_links;
     std::string line, key, word;
+
+    // copying files just in case
+    std::ifstream urls_o( "urls.txt", std::ios::binary );
+    std::ofstream urls_c( "urls_copy.txt", std::ios::binary );
+    std::ifstream index_o( "index.txt", std::ios::binary );
+    std::ofstream index_c( "index_copy.txt", std::ios::binary );
+    urls_c << urls_o.rdbuf();
+    index_c << index_o.rdbuf();
+    urls_o.close();
+    urls_c.close();
+    index_o.close();
+    index_c.close();
 
     // opening files to read
     std::fstream index( "index.txt", std::ios::in );
-    //std::fstream urls( "urls.txt", std::ios::in );
+    std::fstream urls( "urls.txt", std::ios::in );
 
     // loading indexed links
-    /*while ( std::getline( urls, line ) )
-        searched_links.push_back( new std::string( line ) );*/
+    while ( std::getline( urls, line ) )
+        searched_links.push_back( new std::string( line ) );
 
     // loading web index
     while ( std::getline( index, line ) ) {
@@ -318,15 +340,34 @@ uint_fast64_t index( std::string url, uint_fast64_t depth ) {
     }
 
     index.close();
-    //urls.close();
+    urls.close();
 
     // opening files to save
     std::fstream indexx( "index.txt", std::ios::out );
-    //std::fstream urlss( "urls.txt", std::ios::out );
+    std::fstream urlss( "urls.txt", std::ios::out );
 
-    // the crawling
-    uint_fast64_t links_amount( crawl( url, depth, searched_links, index_map ) );
-    
+    /*
+        The threads of crawling
+
+        They take a random URL's from already
+        indexed sites and crawl through them with given depth.
+    */
+    uint_fast64_t links_amount( 0 );
+    if ( searched_links.size() ) {
+        std::uint_fast64_t id;
+        std::future<uint_fast64_t>* links_amounts( new std::future<uint_fast64_t>[threads] );
+        for ( uint_fast64_t i( 0 ); i < threads; ++i ) {
+            id = rand() % searched_links.size();
+            links_amounts[i] = std::async( std::launch::async, crawl, *searched_links[id], depth, std::ref(searched_links), std::ref(index_map));
+        }
+        for ( uint_fast64_t i( 0 ); i < threads; ++i )
+            links_amount += links_amounts[i].get();
+        delete[] links_amounts;
+    } else {
+        links_amount = crawl( "https://www.onet.pl/", depth, searched_links, index_map );
+    }
+
+
     // saving index map file and cleaning afterwards
     for ( auto& pair : index_map ) {
         indexx << pair.first << " ";
@@ -343,28 +384,36 @@ uint_fast64_t index( std::string url, uint_fast64_t depth ) {
 
     // saving urls and cleaning afterwards
     for ( std::string* l : searched_links ) {
-        //urlss << *l << "\n";
+        urlss << *l << "\n";
         delete l;
     }
     searched_links.clear();
-    //urlss.flush();
-    //urlss.close();
+    urlss.flush();
+    urlss.close();
 
     // returning the total amount of sites indexed
     return links_amount;
 }
 
-int main() {
-    std::string url;
-    uint_fast64_t depth;
-
-    std::cout << "The starting URL >> ";
-    std::cin >> url;
-    std::cout << "Depth >> ";
-    std::cin >> depth;
-
+int main( int argc, char* argv[] ) {
+    //uint_fast64_t depth = 3;
+    //uint_fast64_t threads = 0;
+    //for ( int i = 1; i < argc; i += 2 ) {
+    //    // checking flag names
+    //    if ( i + 1 < argc )
+    //        if ( argv[i] == "-d" ) {
+    //            try {
+    //                depth = std::atoi( argv[i + 1] );
+    //            } catch ( ... ) { /* nothing happens */ }
+    //        } else if ( argv[i] == "-t" ) {
+    //            try {
+    //                threads = std::atoi( argv[i+1] );
+    //            } catch ( ... ) { /* nothing happens */ }
+    //        }
+    //}
+    srand( time( NULL ) );
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-    uint_fast64_t total = index( url, depth );
+    uint_fast64_t total = index( 2 );
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 
     std::cout << "Elapsed time >> " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]\n";
