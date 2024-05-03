@@ -235,22 +235,22 @@ uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::stri
     keywords topWords( getKeywords( content, title, language, 5 ) );
 
     // saving indexed site's data
-    //std::cout << url << "\n";
+    std::cout << url << "\n";
     for ( const auto &pair : topWords ) {
-        //// probably it would have been easier if i used unordered_set
-        //// whoops
-        //auto it = std::find_if( pair.first.begin(), pair.first.end(), [&url]( const std::string* l ) {
-        //    return *l == url;
-        //});
-
-        //// save the url
-        //if ( it == pair.first.end() ) {
-        //    index_map[pair.first].push_back( new std::string( url ) );
-        //}
         // if the vector from map doesn't exist, we create
         if ( index_map.find( pair.first ) == index_map.end() )
             index_map[pair.first] = std::vector<std::string*>();
-        index_map[pair.first].push_back( new std::string( url ) );
+
+        // probably it would have been easier if i used unordered_set
+        // whoops
+        auto it = std::find_if( index_map[pair.first].begin(), index_map[pair.first].end(),
+            [&url]( const std::string* l ) {
+                return *l == url;
+            });
+
+        // pushin
+        if ( it == index_map[pair.first].end() )
+            index_map[pair.first].push_back( new std::string( url ) );
     }
 
     --depth;
@@ -287,14 +287,12 @@ uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::stri
 */
 uint_fast64_t index( std::string url, uint_fast64_t depth ) {
     keywords_map index_map;
-    std::vector<std::string*> searched_links;
+    std::vector<std::string*> searched_links( { new std::string( url ) } );
     std::string line, key, word;
 
-    // opening files
-    std::fstream index( "index.txt", std::ios::in | std::ios::out | std::ios::app );
-    std::fstream urls( "urls.txt", std::ios::in | std::ios::out | std::ios::app );
-    if ( !index.is_open() || !urls.is_open() )
-        std::cerr << "File couldn't be opened nor created." << std::endl;
+    // opening files to read
+    std::fstream index( "index.txt", std::ios::in );
+    std::fstream urls( "urls.txt", std::ios::in );
 
     // loading indexed links
     while ( std::getline( urls, line ) )
@@ -315,39 +313,38 @@ uint_fast64_t index( std::string url, uint_fast64_t depth ) {
         }
     }
 
-    // clearing files
-    index.seekp( 0 );
-    urls.seekp( 0 );
-    //index.truncate( 0 );
-    //urls.truncate( 0 );
+    index.close();
+    urls.close();
+
+    // opening files to save
+    std::fstream indexx( "index.txt", std::ios::out );
+    std::fstream urlss( "urls.txt", std::ios::out );
 
     // the crawling
     uint_fast64_t links_amount( crawl( url, depth, searched_links, index_map ) );
     
     // saving index map file and cleaning afterwards
     for ( auto& pair : index_map ) {
-        std::cout << pair.first << " ";
-        index << pair.first << " ";
+        indexx << pair.first << " ";
         for ( const std::string* l : pair.second ) {
-            std::cout << *l << " ";
-            index << *l << " ";
+            indexx << *l << " ";
             delete l;
         }
-        std::cout << "\n";
-        index << "\n";
+        indexx << "\n";
         pair.second.clear();
     }
     index_map.clear();
-    index.close();
+    indexx.flush();
+    indexx.close();
 
     // saving urls and cleaning afterwards
     for ( std::string* l : searched_links ) {
-        std::cout << *l << "\n";
-        urls << *l << "\n";
+        urlss << *l << "\n";
         delete l;
     }
     searched_links.clear();
-    urls.close();
+    urlss.flush();
+    urlss.close();
 
     // returning the total amount of sites indexed
     return links_amount;
