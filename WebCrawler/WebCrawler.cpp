@@ -121,6 +121,10 @@ void extractInfo( const std::string& url, std::string& content, std::vector<std:
                 }
             }
 
+            // adding the slash
+            if ( link->at( link->size() - 1 ) != '/' )
+                *link += "/";
+
             // validating the URL
             if ( validateURL( *link ) )
                 links.push_back( link );
@@ -292,11 +296,11 @@ uint_fast64_t index( std::string url, uint_fast64_t depth ) {
 
     // opening files to read
     std::fstream index( "index.txt", std::ios::in );
-    std::fstream urls( "urls.txt", std::ios::in );
+    //std::fstream urls( "urls.txt", std::ios::in );
 
     // loading indexed links
-    while ( std::getline( urls, line ) )
-        searched_links.push_back( new std::string( line ) );
+    /*while ( std::getline( urls, line ) )
+        searched_links.push_back( new std::string( line ) );*/
 
     // loading web index
     while ( std::getline( index, line ) ) {
@@ -314,11 +318,11 @@ uint_fast64_t index( std::string url, uint_fast64_t depth ) {
     }
 
     index.close();
-    urls.close();
+    //urls.close();
 
     // opening files to save
     std::fstream indexx( "index.txt", std::ios::out );
-    std::fstream urlss( "urls.txt", std::ios::out );
+    //std::fstream urlss( "urls.txt", std::ios::out );
 
     // the crawling
     uint_fast64_t links_amount( crawl( url, depth, searched_links, index_map ) );
@@ -339,12 +343,12 @@ uint_fast64_t index( std::string url, uint_fast64_t depth ) {
 
     // saving urls and cleaning afterwards
     for ( std::string* l : searched_links ) {
-        urlss << *l << "\n";
+        //urlss << *l << "\n";
         delete l;
     }
     searched_links.clear();
-    urlss.flush();
-    urlss.close();
+    //urlss.flush();
+    //urlss.close();
 
     // returning the total amount of sites indexed
     return links_amount;
@@ -366,23 +370,3 @@ int main() {
     std::cout << "Elapsed time >> " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]\n";
     std::cout << "Total links indexed >> " << total << "\n";
 }
-
-/*
-    This is the reversed indexing.
-    Results of the web crawling are saved in a 'index.txt' file
-    with this structure of every site (every line).
-
-        keyword URL1 score1 URL2 score2 URL3 score3 ...
-
-    Every URL must contain given keyword, and the scores are
-    represented by this formula
-
-        Sk = 1000 * Ok / (O1 + O2 + O3 + ... + On)
-
-        n - amount of keywords (without the title)
-        Sk - integer score of k-th keyword
-        Ok - number of it's occurences in the document of k-th keyword
-
-    The main 5 most occuring words on a page are set to be the
-    keywords.
-*/
