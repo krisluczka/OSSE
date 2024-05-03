@@ -20,6 +20,7 @@
 
 // damn
 typedef std::vector<std::pair<std::string, uint_fast64_t>> keywords;
+typedef std::map<std::string, std::vector<std::string*>> keywords_map;
 
 /*
     Function that downloads webpage content
@@ -181,17 +182,7 @@ keywords getKeywords( const std::string& content, std::string title, std::string
     // removing unnecessary words
     keywords result( words.begin(), words.begin() + top );
 
-    // counting the occurences of given words
-    for ( const auto& pair : result ) {
-        total_occurences += pair.second;
-    }
-
-    // calculating true scores of keywords
-    for ( auto& pair : result ) {
-        pair.second = pair.second * 1000 / total_occurences;
-    }
-
-    // appending title keywords' scores
+    // appending title words
     while ( tstream >> word )
         if ( word != "" ) {
             result.push_back( std::make_pair( word, 1000 ) );
@@ -227,7 +218,7 @@ std::string extractContent( const std::string& content ) {
 /*
     Function that crawls through given URL
 */
-uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::string*>& all_time_links, std::fstream& index ) {
+uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::string*>& all_time_links, keywords_map& index_map ) {
     // downloading site's content
     std::string content( getSite( url ) );
     
@@ -244,15 +235,23 @@ uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::stri
     keywords topWords( getKeywords( content, title, language, 5 ) );
 
     // saving indexed site's data
-    std::ostringstream record;
-    record << url << " ";
-    for ( const auto& pair : topWords ) {
-        record << pair.first << " " << pair.second << " ";
-    }
-    index << record.str() << "\n";
+    //std::cout << url << "\n";
+    for ( const auto &pair : topWords ) {
+        //// probably it would have been easier if i used unordered_set
+        //// whoops
+        //auto it = std::find_if( pair.first.begin(), pair.first.end(), [&url]( const std::string* l ) {
+        //    return *l == url;
+        //});
 
-    // debugging
-    std::cout << record.str() << "\n";
+        //// save the url
+        //if ( it == pair.first.end() ) {
+        //    index_map[pair.first].push_back( new std::string( url ) );
+        //}
+        // if the vector from map doesn't exist, we create
+        if ( index_map.find( pair.first ) == index_map.end() )
+            index_map[pair.first] = std::vector<std::string*>();
+        index_map[pair.first].push_back( new std::string( url ) );
+    }
 
     --depth;
     // crawl my spiders!
@@ -269,7 +268,7 @@ uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::stri
                 std::string* new_link( new std::string );
                 *new_link = *l;
                 all_time_links.push_back( new_link );
-                crawl( *l, depth, all_time_links, index );
+                crawl( *l, depth, all_time_links, index_map );
             }
         }
         amount = links.size();
@@ -282,16 +281,81 @@ uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::stri
     return amount;
 }
 
+/*
+    Function that indexes and crawls through
+    the Internet
+*/
+uint_fast64_t index( std::string url, uint_fast64_t depth ) {
+    keywords_map index_map;
+    std::vector<std::string*> searched_links;
+    std::string line, key, word;
+
+    // opening files
+    std::fstream index( "index.txt", std::ios::in | std::ios::out | std::ios::app );
+    std::fstream urls( "urls.txt", std::ios::in | std::ios::out | std::ios::app );
+    if ( !index.is_open() || !urls.is_open() )
+        std::cerr << "File couldn't be opened nor created." << std::endl;
+
+    // loading indexed links
+    while ( std::getline( urls, line ) )
+        searched_links.push_back( new std::string( line ) );
+
+    // loading web index
+    while ( std::getline( index, line ) ) {
+        std::istringstream iss( line );
+        // loading the first word (the keyword)
+        if ( iss >> key ) {
+            // if the vector from map doesn't exist, we create
+            if ( index_map.find( key ) == index_map.end() )
+                index_map[key] = std::vector<std::string*>();
+            
+            // loading next words as the url's
+            while ( iss >> word )
+                index_map[key].push_back( new std::string( word ) );
+        }
+    }
+
+    // clearing files
+    index.seekp( 0 );
+    urls.seekp( 0 );
+    //index.truncate( 0 );
+    //urls.truncate( 0 );
+
+    // the crawling
+    uint_fast64_t links_amount( crawl( url, depth, searched_links, index_map ) );
+    
+    // saving index map file and cleaning afterwards
+    for ( auto& pair : index_map ) {
+        std::cout << pair.first << " ";
+        index << pair.first << " ";
+        for ( const std::string* l : pair.second ) {
+            std::cout << *l << " ";
+            index << *l << " ";
+            delete l;
+        }
+        std::cout << "\n";
+        index << "\n";
+        pair.second.clear();
+    }
+    index_map.clear();
+    index.close();
+
+    // saving urls and cleaning afterwards
+    for ( std::string* l : searched_links ) {
+        std::cout << *l << "\n";
+        urls << *l << "\n";
+        delete l;
+    }
+    searched_links.clear();
+    urls.close();
+
+    // returning the total amount of sites indexed
+    return links_amount;
+}
+
 int main() {
     std::string url;
     uint_fast64_t depth;
-    std::vector<std::string*> searched_links;
-    std::fstream index( "index.txt", std::ios::in | std::ios::out | std::ios::app );
-
-    if ( !index.is_open() ) {
-        std::cerr << "File couldn't be opened nor created." << std::endl;
-        return 1;
-    }
 
     std::cout << "The starting URL >> ";
     std::cin >> url;
@@ -299,34 +363,28 @@ int main() {
     std::cin >> depth;
 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-    uint_fast64_t links_amount = crawl( url, depth, searched_links, index );
+    uint_fast64_t total = index( url, depth );
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 
     std::cout << "Elapsed time >> " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]\n";
-    std::cout << "Total links indexed >> " << links_amount << "\n";
-    
-    for ( std::string* l : searched_links )
-        delete l;
-    searched_links.clear();
-
-    index.close();
+    std::cout << "Total links indexed >> " << total << "\n";
 }
 
 /*
+    This is the reversed indexing.
     Results of the web crawling are saved in a 'index.txt' file
-    with this structure of every site (every line)
+    with this structure of every site (every line).
 
-        URL keyword1 score1 keyword2 score2 ... date_of_indexing
+        keyword URL1 score1 URL2 score2 URL3 score3 ...
 
-    Where first keywords are document's title, and their score is
-    set to 1000. Next keywords are those estimated while indexing,
-    and their scores are calculated by this formula
+    Every URL must contain given keyword, and the scores are
+    represented by this formula
 
         Sk = 1000 * Ok / (O1 + O2 + O3 + ... + On)
 
         n - amount of keywords (without the title)
         Sk - integer score of k-th keyword
-        Ok - number of occurences in the document of k-th keyword
+        Ok - number of it's occurences in the document of k-th keyword
 
     The main 5 most occuring words on a page are set to be the
     keywords.
