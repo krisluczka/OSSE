@@ -1,6 +1,7 @@
 #pragma once
 #ifndef DICTIONARIES_H
 #define DICTIONARIE_H
+#include <string>
 #include <codecvt>
 #include <locale>
 
@@ -35,7 +36,8 @@ const std::map<std::string, std::vector<std::string>> dictionary = {
     latin equvialents. Should include both lowercase
     and uppercase variants.
 
-    Total hours spent to solve this - ~9 hours
+    (Total hours spent to solve this - ~9 hours)
+    Jokes on you - still not working
 */
 const inline std::string remove_diactric( const std::string &content ) {
     std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;

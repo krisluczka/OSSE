@@ -30,7 +30,7 @@ typedef std::map<std::string, std::vector<std::string*>> keywords_map;
 /*
     Function that downloads webpage content
 */
-std::string getSite( const std::string& url ) {
+std::string get_site( const std::string& url ) {
     // session opening
     HINTERNET hInternet = InternetOpenA( "Mozilla/5.0", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0 );
     if ( !hInternet ) {
@@ -69,7 +69,7 @@ std::string getSite( const std::string& url ) {
 /*
     Function that validates the URL
 */
-inline bool validateURL( const std::string& url ) {
+inline bool validate_url( const std::string& url ) {
     std::regex urlRegex( "^(http|https)://[a-zA-Z0-9-.]+\\.[a-zA-Z]{2,}(?:/[^\\s]*)?$" );
     return std::regex_match( url, urlRegex );
 }
@@ -81,10 +81,10 @@ inline bool validateURL( const std::string& url ) {
         * language
     from a HTML document
 */
-void extractInfo( const std::string& url, std::string& content, std::vector<std::string*>& links, std::string& title, std::string& language, bool extract_links = true ) {
+void extract_info( const std::string& url, std::string& content, std::vector<std::string*>& links, std::string& title, std::string& language, bool extract_links = true ) {
     // regexes
-    std::regex titleRegex( "<title>(.*?)</title>" );
-    std::regex langRegex( "<html(?:[^>]*\\s+)?(?:lang|xml:lang)[\\s]*=[\\s]*['\"]([^'\"]*)['\"]" );
+    std::regex titleRegex( "<title>(.*?)</title>", std::regex::icase );
+    std::regex langRegex( "<html(?:[^>]*\\s+)?(?:lang|xml:lang)[\\s]*=[\\s]*['\"]([^'\"]*)['\"]", std::regex::icase );
     std::smatch match;
 
     // searching for the title
@@ -95,7 +95,7 @@ void extractInfo( const std::string& url, std::string& content, std::vector<std:
     // removing title's punctuation marks
     title.erase( std::remove_if( title.begin(), title.end(), []( char c ) {
         return std::ispunct( static_cast<unsigned char>(c) );
-        } ), title.end() );
+    }), title.end() );
 
         // changing to lowercase
     std::transform( title.begin(), title.end(), title.begin(), ::tolower );
@@ -131,7 +131,7 @@ void extractInfo( const std::string& url, std::string& content, std::vector<std:
                 *link += "/";
 
             // validating the URL
-            if ( validateURL( *link ) )
+            if ( validate_url( *link ) )
                 links.push_back( link );
 
             // going further in the webpage
@@ -141,31 +141,55 @@ void extractInfo( const std::string& url, std::string& content, std::vector<std:
 }
 
 /*
+    Function that extracts meta keywords
+*/
+std::string extract_meta_keywords( const std::string& content ) {
+    std::regex keywordsRegex( "<meta\\s+name=['\"]keywords['\"]\\s+content=['\"](.*?)['\"]\\s*/?>", std::regex::icase );
+    std::smatch match;
+
+    if ( std::regex_search( content, match, keywordsRegex ) ) {
+        std::string keywords( match[1].str() );
+
+        // removing all punctuation marks
+        keywords.erase( std::remove_if( keywords.begin(), keywords.end(), []( char c ) {
+            return std::ispunct( static_cast<unsigned char>(c) );
+        }), keywords.end() );
+
+        // removing diactric characters
+        keywords = remove_diactric( keywords );
+
+        // changing to lowercase
+        std::transform( keywords.begin(), keywords.end(), keywords.begin(), ::tolower );
+
+        return keywords;
+    } else return "";
+}
+
+/*
     Function that returns the most occuring words in a string
 */
-keywords getKeywords( const std::string& content, std::string title, std::string language, uint_fast64_t top ) {
+keywords extract_keywords( const std::string& content, std::string& title, std::string& language, std::string& meta_keywords, uint_fast64_t top ) {
     std::map<std::string, uint_fast64_t> wordScores;
-    std::istringstream cstream( content ), tstream( title );
+    std::istringstream cstream( content ), tstream( title ), mstream( meta_keywords );
     std::string word;
-    uint_fast64_t title_size( 0 ), total_occurences( 0 );
+    uint_fast64_t additional_size( 0 );
 
     // iterating through the whole content
     while ( cstream >> word ) {
         // removing all punctuation marks
         word.erase( std::remove_if( word.begin(), word.end(), []( char c ) {
             return std::ispunct( static_cast<unsigned char>(c) );
-            } ), word.end() );
+        }), word.end() );
 
-            // changing to lowercase
+        // changing to lowercase
         std::transform( word.begin(), word.end(), word.begin(), ::tolower );
 
         // checking if document's language has the dictionary prepared
         if ( dictionary.find( language ) != dictionary.end() ) {
-            const std::vector<std::string>& ignoredWords = dictionary.at( language );
+            const std::vector<std::string>& ignoredWords( dictionary.at( language ) );
             // if the word is in the dictionary, ignore it and move to the next
-            if ( std::find( ignoredWords.begin(), ignoredWords.end(), word ) != ignoredWords.end() ) {
+            if ( std::find( ignoredWords.begin(), ignoredWords.end(), word ) != ignoredWords.end() )
                 continue;
-            }
         }
 
         // counting up the occurences
@@ -182,9 +206,9 @@ keywords getKeywords( const std::string& content, std::string title, std::string
     // hate to use this way of sorting but it really is better than by hand
     std::sort( words.begin(), words.end(), []( const auto& a, const auto& b ) {
         return a.second > b.second;
-        } );
+    });
 
-        // preventing the potential going out of scope
+    // preventing the potential going out of scope
     if ( top > words.size() )
         top = words.size();
 
@@ -192,12 +216,40 @@ keywords getKeywords( const std::string& content, std::string title, std::string
     keywords result( words.begin(), words.begin() + top );
 
     // appending title words
-    while ( tstream >> word )
+    while ( tstream >> word ) {
+        // checking if document's language has the dictionary prepared
+        if ( dictionary.find( language ) != dictionary.end() ) {
+            const std::vector<std::string>& ignoredWords( dictionary.at( language ) );
+            // if the word is in the dictionary, ignore it and move to the next
+            if ( std::find( ignoredWords.begin(), ignoredWords.end(), word ) != ignoredWords.end() )
+                continue;
+        }
+        
+        // appending the title
         if ( word != "" ) {
             result.push_back( std::make_pair( word, 1000 ) );
-            ++title_size;
+            ++additional_size;
         }
-    top += title_size;
+    }
+
+    // appending meta keywords
+    while ( mstream >> word ) {
+        // checking if document's language has the dictionary prepared
+        if ( dictionary.find( language ) != dictionary.end() ) {
+            const std::vector<std::string>& ignoredWords( dictionary.at( language ) );
+            // if the word is in the dictionary, ignore it and move to the next
+            if ( std::find( ignoredWords.begin(), ignoredWords.end(), word ) != ignoredWords.end() )
+                continue;
+        }
+
+        // appending the title
+        if ( word != "" ) {
+            result.push_back( std::make_pair( word, 1000 ) );
+            ++additional_size;
+        }
+    }
+
+    top += additional_size;
 
     // returning sorted array of keywords
     return result;
@@ -207,7 +259,7 @@ keywords getKeywords( const std::string& content, std::string title, std::string
     Function that extracts raw content from HTML
     To rewrite!
 */
-std::string extractContent( const std::string& content ) {
+std::string extract_content( const std::string& content ) {
     std::regex tagsRegex( "<(?:script|style|noscript)[^>]*>[\\s\\S]*?<\\/\\s*(?:script|style|noscript)>" );
     std::regex htmlRegex( "<[^>]*>" );
     std::regex specialRegex( "&[a-zA-Z0-9#]+;" );
@@ -229,19 +281,21 @@ std::string extractContent( const std::string& content ) {
 */
 uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::string*>& all_time_links, keywords_map& index_map ) {
     // downloading site's content
-    std::string content( getSite( url ) );
+    std::string content( get_site( url ) );
 
     // extracting info about the document
     std::vector<std::string*> links;
     std::string language;
     std::string title;
     uint_fast64_t amount( 0 );
-    extractInfo( url, content, links, title, language, (depth > 1) );
+    extract_info( url, content, links, title, language, (depth > 1) );
 
+    // extracting meta keywords
+    std::string meta_keywords( extract_meta_keywords( content ) );
     // deHTMLing
-    content = extractContent( content );
+    content = extract_content( content );
     // extracting keywords
-    keywords topWords( getKeywords( content, title, language, 5 ) );
+    keywords topWords( extract_keywords( content, title, language, meta_keywords, 5 ) );
 
     // saving indexed site's data
     std::cout << url << "\n\n";
@@ -366,7 +420,7 @@ uint_fast64_t index( uint_fast64_t depth, uint_fast64_t threads = 0 ) {
             links_amount += links_amounts[i].get();
         delete[] links_amounts;
     } else {
-        links_amount = crawl( "https://www.onet.pl/", depth, searched_links, index_map );
+        links_amount = crawl( "https://www.wierszespodtaboreta.pl/", depth, searched_links, index_map );
     }
 
 

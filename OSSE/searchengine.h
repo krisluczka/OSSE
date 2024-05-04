@@ -2,9 +2,11 @@
 #ifndef SEARCHENGINE_H
 #define SEARCHENGINE_H
 #include <iostream>
+#include <string>
 #include <sstream>
 #include <map>
 #include <vector>
+#include "dictionaries.h"
 
 typedef std::map<std::string, std::vector<std::string*>> keywords_map;
 
@@ -45,6 +47,9 @@ void load_index_map( keywords_map& index_map ) {
 	index.close();
 }
 
+/*
+	Function that cleans up after index
+*/
 void unload_index_map( keywords_map& index_map ) {
 	// deleting the index map contents
 	for ( auto& pair : index_map ) {
@@ -57,12 +62,31 @@ void unload_index_map( keywords_map& index_map ) {
 }
 
 /*
+	Function that purifies a query
+*/
+void inline purify_query( std::string& query ) {
+	// removing all punctuation marks
+	query.erase( std::remove_if( query.begin(), query.end(), []( char c ) {
+        return std::ispunct( static_cast<unsigned char>(c) );
+    }), query.end() );
+
+    // removing diactric characters
+	query = remove_diactric( query );
+	std::cout << query << std::endl;
+
+    // changing to lowercase
+    std::transform( query.begin(), query.end(), query.begin(), ::tolower );
+}
+
+/*
 	Function that executes a query
 */
 void query( std::string query, const keywords_map& index_map, std::vector<std::string*>& results ) {
 	// never, ever delete it's content 
 	// it contains pointers to index_map's strings
 	results.clear();
+
+	purify_query( query );
 
 	std::istringstream iss( query );
 	std::string keyword;
