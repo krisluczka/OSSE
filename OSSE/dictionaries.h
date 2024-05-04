@@ -1,9 +1,10 @@
 #pragma once
 #ifndef DICTIONARIES_H
-#define DICTIONARIE_H
+#define DICTIONARIES_H
 #include <string>
 #include <codecvt>
 #include <locale>
+#include <unordered_map>
 
 /*
     The dictionary of ignored words must contain:
@@ -36,8 +37,7 @@ const std::map<std::string, std::vector<std::string>> dictionary = {
     latin equvialents. Should include both lowercase
     and uppercase variants.
 
-    (Total hours spent to solve this - ~9 hours)
-    Jokes on you - still not working
+    Total hours spent to solve this - ~9 hours
 */
 const inline std::string remove_diactric( const std::string &content ) {
     std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
@@ -109,5 +109,16 @@ const inline std::string remove_diactric( const std::string &content ) {
 
     return result;
 }
+
+/*
+    Diacritic characters map
+*/
+const std::unordered_map<char, char> diacritic_map = {
+    {'π', 'a'}, {'Ê', 'c'}, {'Í', 'e'}, {'≥', 'l'},
+    {'Ò', 'n'}, {'Û', 'o'}, {'ú', 's'}, {'ü', 'z'},
+    {'ø', 'z'}, {'•', 'A'}, {'∆', 'C'}, {' ', 'E'},
+    {'£', 'L'}, {'—', 'N'}, {'”', 'O'}, {'å', 'S'},
+    {'è', 'Z'}, {'Ø', 'Z'}
+};
 
 #endif

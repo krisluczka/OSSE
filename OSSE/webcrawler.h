@@ -97,7 +97,7 @@ void extract_info( const std::string& url, std::string& content, std::vector<std
         return std::ispunct( static_cast<unsigned char>(c) );
     }), title.end() );
 
-        // changing to lowercase
+    // changing to lowercase
     std::transform( title.begin(), title.end(), title.begin(), ::tolower );
 
     // searching for the language

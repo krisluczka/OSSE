@@ -64,18 +64,27 @@ void unload_index_map( keywords_map& index_map ) {
 /*
 	Function that purifies a query
 */
-void inline purify_query( std::string& query ) {
+std::string inline purify_query( std::string& query ) {
+	std::string result;
+
 	// removing all punctuation marks
 	query.erase( std::remove_if( query.begin(), query.end(), []( char c ) {
         return std::ispunct( static_cast<unsigned char>(c) );
     }), query.end() );
 
-    // removing diactric characters
-	query = remove_diactric( query );
-	std::cout << query << std::endl;
+	// removing diacritic characters
+	for ( char c : query ) {
+		auto it( diacritic_map.find( c ) );
+		if ( it != diacritic_map.end() )
+			result += it->second;
+		else
+			result += c;
+	}
 
     // changing to lowercase
-    std::transform( query.begin(), query.end(), query.begin(), ::tolower );
+    std::transform( result.begin(), result.end(), result.begin(), ::tolower );
+
+	return result;
 }
 
 /*
@@ -86,7 +95,7 @@ void query( std::string query, const keywords_map& index_map, std::vector<std::s
 	// it contains pointers to index_map's strings
 	results.clear();
 
-	purify_query( query );
+	query = purify_query( query );
 
 	std::istringstream iss( query );
 	std::string keyword;

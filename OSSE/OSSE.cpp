@@ -9,8 +9,8 @@
 #include <time.h>
 
 #include "webcrawler.h"
-#include "dictionaries.h"
 #include "searchengine.h"
+#include "dictionaries.h"
 
 keywords_map index_map;
 
@@ -20,7 +20,6 @@ int main() {
     query( "Krzysztof Łuczka, wiersze ąźżćęłńó", index_map, results );
     show_results( results );
     unload_index_map( index_map );
-
     
     /*srand( time( NULL ) );
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
@@ -29,5 +28,4 @@ int main() {
 
     std::cout << "Elapsed time >> " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]\n";
     std::cout << "Total links indexed >> " << total << "\n";*/
-    
 }
