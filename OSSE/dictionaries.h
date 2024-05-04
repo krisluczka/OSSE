@@ -1,4 +1,6 @@
 #pragma once
+#ifndef DICTIONARIES_H
+#define DICTIONARIE_H
 #include <codecvt>
 #include <locale>
 
@@ -105,3 +107,5 @@ const inline std::string remove_diactric( const std::string &content ) {
 
     return result;
 }
+
+#endif

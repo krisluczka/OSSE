@@ -130,6 +130,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="dictionaries.h" />
+    <ClInclude Include="searchengine.h" />
+    <ClInclude Include="webcrawler.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="OSSE.cpp" />
