@@ -1,5 +1,7 @@
 ﻿/*
-    WebCrawler project, Krzysztof Łuczka 2024, MIT license
+    Open Source Search Engine - OSSE
+    
+    Krzysztof Łuczka 2024, MIT license
 */
 #include <iostream>
 #include <windows.h>
@@ -242,7 +244,7 @@ uint_fast64_t crawl( std::string url, uint_fast64_t depth, std::vector<std::stri
     keywords topWords( getKeywords( content, title, language, 5 ) );
 
     // saving indexed site's data
-    std::cout << url << "\n";
+    std::cout << url << "\n\n";
     for ( const auto &pair : topWords ) {
         // if the vector from map doesn't exist, we create
         if ( index_map.find( pair.first ) == index_map.end() )
@@ -395,22 +397,7 @@ uint_fast64_t index( uint_fast64_t depth, uint_fast64_t threads = 0 ) {
     return links_amount;
 }
 
-int main( int argc, char* argv[] ) {
-    //uint_fast64_t depth = 3;
-    //uint_fast64_t threads = 0;
-    //for ( int i = 1; i < argc; i += 2 ) {
-    //    // checking flag names
-    //    if ( i + 1 < argc )
-    //        if ( argv[i] == "-d" ) {
-    //            try {
-    //                depth = std::atoi( argv[i + 1] );
-    //            } catch ( ... ) { /* nothing happens */ }
-    //        } else if ( argv[i] == "-t" ) {
-    //            try {
-    //                threads = std::atoi( argv[i+1] );
-    //            } catch ( ... ) { /* nothing happens */ }
-    //        }
-    //}
+int main() {
     srand( time( NULL ) );
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
     uint_fast64_t total = index( 2 );

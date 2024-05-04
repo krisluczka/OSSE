@@ -129,10 +129,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="WebCrawler.cpp" />
+    <ClInclude Include="dictionaries.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="dictionaries.h" />
+    <ClCompile Include="OSSE.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

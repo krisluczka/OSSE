@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.9.34622.214
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "WebCrawler", "WebCrawler\WebCrawler.vcxproj", "{33C3306E-684F-4DEB-B7F1-8720125BE563}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "OSSE", "OSSE\OSSE.vcxproj", "{33C3306E-684F-4DEB-B7F1-8720125BE563}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
